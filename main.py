@@ -2,7 +2,7 @@
 #
 # Simple manager prototype for xqemu
 #
-from PyQt5.QtWidgets import QApplication, QDialog, QFileDialog, QMainWindow, QMessageBox
+from PyQt5.QtWidgets import QApplication, QDialog, QFileDialog, QMainWindow, QMessageBox, QWidget
 from PyQt5.uic import loadUiType
 from PyQt5 import QtCore, QtGui
 from qmp import QEMUMonitorProtocol
@@ -12,6 +12,8 @@ import json
 import subprocess
 import time
 import platform
+from Xlib import X
+from Xlib.display import Display
 
 SETTINGS_FILE = './settings.json'
 
@@ -124,6 +126,21 @@ class SettingsWindow(QDialog, settings_class):
 		if fileName:
 			obj.setText(fileName)
 
+def findXQEMUWindowX11(window, indent):
+	children = window.query_tree().children
+	for w in children:
+		#owner = window.get_full_property(display.get_atom('_NET_WM_PID'), X.AnyPropertyType)
+		name = w.get_wm_class()
+		print(indent, "%s: 0x%X" % (name, w.id))
+		if name != None and name[0] == "qemu-system-i386":					
+			print("Found!")
+			return w
+		search = findXQEMUWindowX11(w, indent+'-')
+		if search != None:
+			return search
+	return None
+widget = 0
+x = 0
 class Xqemu(object):
 	def __init__(self):
 		self._p = None
@@ -247,11 +264,26 @@ class Xqemu(object):
 					i += 1
 					continue
 			break
+		global widget
+		global x
+		display = Display()
+		root = display.screen().root
+		x11w = findXQEMUWindowX11(root, "-")
+		qw = QtGui.QWindow.fromWinId(x11w.id)
+		print(qw)
+		print(widget.centralWidget())
+		x = QWidget.createWindowContainer(qw)
+		widget.centralWidget().layout().addWidget(x)
+		x.setFixedSize(640, 480)
 
 	def stop(self):
 		if self._p:
+			global widget
+			global x
+			widget.centralWidget().layout().removeWidget(x)
 			self._p.terminate()
 			self._p = None
+
 
 	def run_cmd(self, cmd):
 		if type(cmd) is str:
@@ -371,6 +403,7 @@ def main():
 	palette.setColor(QtGui.QPalette.HighlightedText, QtCore.Qt.black)
 	app.setPalette(palette)
 
+	global widget
 	widget = MainWindow()
 	widget.show()
 	sys.exit(app.exec_())
